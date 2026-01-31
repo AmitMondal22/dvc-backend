@@ -10,7 +10,7 @@ const authRoutes = require('./src/routes/authRoutes');
 const apiRoutes = require('./src/routes/apiRoutes');
 
 const app = express();
-const PORT = process.env.PORT || 3000;
+const PORT = process.env.PORT || 3003;
 
 // 1. Connect DB & Seed Admin
 connectDB().then(async () => {
