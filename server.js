@@ -18,7 +18,11 @@ connectDB().then(async () => {
 });
 
 // 2. Middleware
-app.use(cors()); // Allow frontend access
+app.use(cors({
+    origin: '*', // Allow all origins
+    methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH'],
+    credentials: true
+}));
 app.use(express.json());
 
 // 3. Register Routes
