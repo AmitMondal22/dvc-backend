@@ -1,0 +1,19 @@
+PORT=3003
+
+JWT_SECRET=supersecretkey123456
+
+MONGO_URI=mongodb://root:VjjsdfuDtnj6567567DRghg%23%23%23%23%23%4067576@139.59.41.28:27017/solar_moni?authSource=admin
+
+# Solarman API Config
+SOLARMAN_BASE_URL=https://globalapi.solarmanpv.com
+SOLARMAN_APP_ID=3024071792581408
+SOLARMAN_APP_SECRET=17040f8e7f4f70c389d90fea2520af0a
+SOLARMAN_EMAIL=kinetixtradecom@gmail.com
+SOLARMAN_PASSWORD=c20461e9b56cccfc7c92304515c13081ce04d90fb9e844494b6dee735fd0b0ff
+
+
+# OpenWeatherMap Config
+OPENWEATHER_API_KEY=12b6b6ea814be7076ee9e31b4898cc32
+OPENWEATHER_BASE_URL=https://api.openweathermap.org/data/2.5/solar_radiation
+OPENWEATHER_LATITUDE=23.372522
+OPENWEATHER_LONGITUDE=85.114914

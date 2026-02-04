@@ -132,9 +132,13 @@ class SolarmanService {
     // 4. SYNC DEVICE DATA
     async syncCurrentData(deviceSn, deviceId) {
         try {
+            console.log(`📊 Fetching data for device: ${deviceSn}`);
             const res = await this.api.post('/device/v1.0/currentData', { deviceSn });
             
-            if (!res.data.dataList || res.data.dataList.length === 0) return;
+            if (!res.data.dataList || res.data.dataList.length === 0) {
+                console.log(`⚠️ No data received for ${deviceSn}`);
+                return;
+            }
 
             const collectionTime = res.data.collectionTime;
             
@@ -157,15 +161,20 @@ class SolarmanService {
                 cumulativeProduction: getValue('Et_ge0')
             };
 
-            const exists = await DeviceData.findOne({ deviceSn, collectionTime });
+            // Upsert: Update if exists, Insert if new (instead of checking separately)
+            const result = await DeviceData.findOneAndUpdate(
+                { deviceSn, collectionTime },
+                dataPayload,
+                { upsert: true, new: true }
+            );
             
-            if (!exists) {
-                await DeviceData.create(dataPayload);
-                console.log(`💾 Device Data + Weather Link saved for ${deviceSn}`);
-            }
+            console.log(`💾 Device Data saved for ${deviceSn} at ${new Date(collectionTime * 1000).toISOString()} | AC Power: ${dataPayload.acPower}W`);
 
         } catch (error) {
             console.error(`❌ Sync Data Error (${deviceSn}):`, error.message);
+            if (error.response && error.response.data) {
+                console.error('   Response Error:', error.response.data);
+            }
         }
     }
 
@@ -175,19 +184,33 @@ class SolarmanService {
         try {
             const stations = await this.syncStations();
             
+            if (stations.length === 0) {
+                console.log('⚠️ No stations found');
+                return;
+            }
+            
             for (const station of stations) {
+                console.log(`\n📍 Processing Station: ${station.id}`);
                 const devices = await this.syncDevices(station.id);
+                
+                if (devices.length === 0) {
+                    console.log(`  └─ No devices in station ${station.id}`);
+                    continue;
+                }
                 
                 for (const device of devices) {
                     // Only fetch data for Inverters (or other relevant types)
                     if (device.deviceType === 'INVERTER') {
                         await this.syncCurrentData(device.deviceSn, device.deviceId);
+                    } else {
+                        console.log(`  ⏭️ Skipping non-inverter device: ${device.deviceSn} (${device.deviceType})`);
                     }
                 }
             }
-            console.log('--- ✅ Full Sync Complete ---');
+            console.log('--- ✅ Full Sync Complete ---\n');
         } catch (error) {
             console.error('❌ Sync Logic Failed:', error.message);
+            console.error(error);
         }
     }
 }

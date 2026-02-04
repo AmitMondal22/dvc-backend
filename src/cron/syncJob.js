@@ -5,7 +5,7 @@ const weatherService = require('../services/weatherService');
 const startScheduler = () => {
     
     // 1. Solarman Sync - Every Minute (* * * * *)
-    cron.schedule('* * * * *', async () => {
+    cron.schedule('*/5 * * * *', async () => {
         console.log(`\n[${new Date().toISOString()}] ⚡ Triggering Solarman Sync...`);
         await solarmanService.runFullSync();
     });

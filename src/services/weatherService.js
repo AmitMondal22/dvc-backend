@@ -5,14 +5,23 @@ class WeatherService {
     
     async fetchAndStoreWeather() {
         try {
-            // 1. Define the Solar Radiation API URL
-            // Docs: https://openweathermap.org/api/solar-radiation
-            const url = `https://api.openweathermap.org/data/2.5/solar_radiation`;
+            // 1. Define the Forecast API URL with Daily Weather & Radiation
+            // Docs: https://open-meteo.com/en/docs/forecast-api
+            const url = `https://api.open-meteo.com/v1/forecast`;
             
+            const today = new Date().toISOString().split('T')[0];
+            const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
+
             const params = {
-                lat: process.env.OPENWEATHER_LATITUDE,
-                lon: process.env.OPENWEATHER_LONGITUDE,
-                appid: process.env.OPENWEATHER_API_KEY,
+                latitude: process.env.OPENWEATHER_LATITUDE || 40.7128,
+                longitude: process.env.OPENWEATHER_LONGITUDE || -74.0060,
+                daily: 'weather_code,temperature_2m_max,temperature_2m_min,shortwave_radiation_sum',
+                timezone: 'America/New_York',
+                wind_speed_unit: 'mph',
+                temperature_unit: 'fahrenheit',
+                precipitation_unit: 'inch',
+                start_date: today,
+                end_date: tomorrow
             };
 
             // 2. Call the API
@@ -21,44 +30,40 @@ class WeatherService {
             const now = Math.floor(Date.now() / 1000);
 
             // 3. Parse Response
-            // The structure is typically lists of timestamped data, or a current value.
-            // If it returns a list, we take the closest/current one.
-            // Assuming the 'current' endpoint returns a direct object:
-            
             let ghi = 0;
-            let dni = 0;
-            let dhi = 0;
+            let tempMax = 0;
+            let tempMin = 0;
+            let weatherCode = 0;
 
-            // Handle different API response variations
-            if (data.radiation) {
-                 // Some versions return just { radiation: 120 }
-                if (typeof data.radiation === 'number') {
-                    ghi = data.radiation;
-                } 
-                // Others might return detailed objects
-                else if (typeof data.radiation === 'object') {
-                    ghi = data.radiation.ghi || 0;
-                    dni = data.radiation.dni || 0;
-                    dhi = data.radiation.dhi || 0;
-                }
-            } else if (Array.isArray(data) && data.length > 0) {
-                // If it returns an hourly forecast list, take the first (current) item
-                ghi = data[0].radiation || 0;
+            // Handle Open-Meteo Daily Forecast API response
+            if (data.daily) {
+                ghi = data.daily.shortwave_radiation_sum && data.daily.shortwave_radiation_sum[0] 
+                    ? parseFloat(data.daily.shortwave_radiation_sum[0]) 
+                    : 0;  // Daily GHI (Shortwave Radiation Sum in MJ/m²)
+                tempMax = data.daily.temperature_2m_max && data.daily.temperature_2m_max[0] 
+                    ? parseFloat(data.daily.temperature_2m_max[0]) 
+                    : 0;
+                tempMin = data.daily.temperature_2m_min && data.daily.temperature_2m_min[0] 
+                    ? parseFloat(data.daily.temperature_2m_min[0]) 
+                    : 0;
+                weatherCode = data.daily.weather_code && data.daily.weather_code[0] 
+                    ? parseInt(data.daily.weather_code[0]) 
+                    : 0;
             }
 
-            console.log(`☀️ Solar Radiation Synced: ${ghi} W/m²`);
+            console.log(`☀️ GHI (Shortwave Radiation) Synced: ${ghi} kWh/m² | Temp: ${tempMin}°F - ${tempMax}°F | Code: ${weatherCode}`);
 
             // 4. Save to DB
             const weatherEntry = await WeatherData.create({
                 location: {
-                    lat: params.lat,
-                    lon: params.lon
+                    lat: params.latitude,
+                    lon: params.longitude
                 },
-                ghi: ghi, // Global Horizontal Irradiance
-                dni: dni,
-                dhi: dhi,
-                temp: 0, // Not available in this specific endpoint
-                clouds: 0, // Not available in this specific endpoint
+                ghi: ghi, // Global Horizontal Irradiance (kWh/m²)
+                temp: (tempMax + tempMin) / 2, // Average temperature
+                clouds: weatherCode, // Store weather code as reference
+                tempMax: tempMax,
+                tempMin: tempMin,
                 rawJson: data,
                 timestamp: now
             });
@@ -66,7 +71,7 @@ class WeatherService {
             return weatherEntry;
 
         } catch (error) {
-            console.error('❌ Solar Radiation Sync Error:', error.response ? error.response.data : error.message);
+            console.error('❌ Weather Data Sync Error:', error.response ? error.response.data : error.message);
             // Fallback: Return null so the app doesn't crash
             return null;
         }
