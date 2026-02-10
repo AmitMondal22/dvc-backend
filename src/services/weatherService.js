@@ -5,23 +5,15 @@ class WeatherService {
     
     async fetchAndStoreWeather() {
         try {
-            // 1. Define the Forecast API URL with Daily Weather & Radiation
+            // 1. Define the Forecast API URL with Current Shortwave Radiation
             // Docs: https://open-meteo.com/en/docs/forecast-api
             const url = `https://api.open-meteo.com/v1/forecast`;
-            
-            const today = new Date().toISOString().split('T')[0];
-            const tomorrow = new Date(Date.now() + 86400000).toISOString().split('T')[0];
 
             const params = {
                 latitude: process.env.OPENWEATHER_LATITUDE || 40.7128,
                 longitude: process.env.OPENWEATHER_LONGITUDE || -74.0060,
-                daily: 'weather_code,temperature_2m_max,temperature_2m_min,shortwave_radiation_sum',
-                timezone: 'America/New_York',
-                wind_speed_unit: 'mph',
-                temperature_unit: 'fahrenheit',
-                precipitation_unit: 'inch',
-                start_date: today,
-                end_date: tomorrow
+                current: 'shortwave_radiation',
+                timezone: 'Asia/Kolkata'
             };
 
             // 2. Call the API
@@ -29,29 +21,15 @@ class WeatherService {
             const data = response.data;
             const now = Math.floor(Date.now() / 1000);
 
-            // 3. Parse Response
+            // 3. Parse Response - Extract current shortwave_radiation as GHI
             let ghi = 0;
-            let tempMax = 0;
-            let tempMin = 0;
-            let weatherCode = 0;
 
-            // Handle Open-Meteo Daily Forecast API response
-            if (data.daily) {
-                ghi = data.daily.shortwave_radiation_sum && data.daily.shortwave_radiation_sum[0] 
-                    ? parseFloat(data.daily.shortwave_radiation_sum[0]) 
-                    : 0;  // Daily GHI (Shortwave Radiation Sum in MJ/m²)
-                tempMax = data.daily.temperature_2m_max && data.daily.temperature_2m_max[0] 
-                    ? parseFloat(data.daily.temperature_2m_max[0]) 
-                    : 0;
-                tempMin = data.daily.temperature_2m_min && data.daily.temperature_2m_min[0] 
-                    ? parseFloat(data.daily.temperature_2m_min[0]) 
-                    : 0;
-                weatherCode = data.daily.weather_code && data.daily.weather_code[0] 
-                    ? parseInt(data.daily.weather_code[0]) 
-                    : 0;
+            // Handle Open-Meteo Current API response
+            if (data.current && data.current.shortwave_radiation !== undefined) {
+                ghi = parseFloat(data.current.shortwave_radiation);  // Current GHI (Shortwave Radiation in W/m²)
             }
 
-            console.log(`☀️ GHI (Shortwave Radiation) Synced: ${ghi} kWh/m² | Temp: ${tempMin}°F - ${tempMax}°F | Code: ${weatherCode}`);
+            console.log(`☀️ GHI (Shortwave Radiation) Synced: ${ghi} W/m² | Latitude: ${params.latitude} | Longitude: ${params.longitude}`);
 
             // 4. Save to DB
             const weatherEntry = await WeatherData.create({
@@ -59,11 +37,7 @@ class WeatherService {
                     lat: params.latitude,
                     lon: params.longitude
                 },
-                ghi: ghi, // Global Horizontal Irradiance (kWh/m²)
-                temp: (tempMax + tempMin) / 2, // Average temperature
-                clouds: weatherCode, // Store weather code as reference
-                tempMax: tempMax,
-                tempMin: tempMin,
+                ghi: ghi, // Global Horizontal Irradiance (W/m²)
                 rawJson: data,
                 timestamp: now
             });
