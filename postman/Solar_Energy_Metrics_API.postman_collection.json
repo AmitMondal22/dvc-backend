@@ -1,0 +1,276 @@
+{
+  "info": {
+    "name": "Solar Energy Metrics API",
+    "description": "API Collection for Solar Energy Performance Calculations\n\nEndpoints:\n1. GET /device/:deviceId/solar-metrics - Calculate Daily PR and CUF",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "item": [
+    {
+      "name": "Solar Metrics",
+      "item": [
+        {
+          "name": "Calculate Solar Metrics",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwt_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/device/1/solar-metrics?fromDate=2026-02-10&toDate=2026-02-12&tiltAngle=18&diffuseFraction=0.2&albedo=0.2",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "device",
+                "1",
+                "solar-metrics"
+              ],
+              "query": [
+                {
+                  "key": "fromDate",
+                  "value": "2026-02-10",
+                  "description": "Start date in format YYYY-MM-DD (optional, defaults to today)"
+                },
+                {
+                  "key": "toDate",
+                  "value": "2026-02-12",
+                  "description": "End date in format YYYY-MM-DD (optional, defaults to today)"
+                },
+                {
+                  "key": "tiltAngle",
+                  "value": "18",
+                  "description": "Module tilt angle in degrees (optional, default: 18)"
+                },
+                {
+                  "key": "diffuseFraction",
+                  "value": "0.2",
+                  "description": "Diffuse fraction (optional, default: 0.2, typical range 0.15-0.25)"
+                },
+                {
+                  "key": "albedo",
+                  "value": "0.2",
+                  "description": "Ground reflectance/albedo (optional, default: 0.2)"
+                }
+              ]
+            },
+            "description": "Calculate solar energy performance metrics including Performance Ratio (PR) and Capacity Utilization Factor (CUF) for a device.\n\n**Path Parameters:**\n- `deviceId` (required): Device ID\n\n**Query Parameters:**\n- `fromDate` (optional): Start date (YYYY-MM-DD), defaults to today\n- `toDate` (optional): End date (YYYY-MM-DD), defaults to today\n- `tiltAngle` (optional): Module tilt angle in degrees (default: 18°)\n- `diffuseFraction` (optional): Diffuse fraction (default: 0.2)\n- `albedo` (optional): Ground reflectance (default: 0.2)\n\n**Authentication:** Bearer Token (JWT)\n\n**Calculations Performed:**\n1. Irradiance Components\n   - Diffuse: GHI × fd × (1+cosβ)/2\n   - Reflected: GHI × ρ × (1−cosβ)/2\n   - Beam: GHI − (Id + Ir)\n   - Total POA: Ib + Id + Ir\n\n2. Performance Ratio (PR)\n   - PR = (Eac / Pdc) / (GHI / 1) × 100 (%)\n\n3. Capacity Utilization Factor (CUF)\n   - CUF = (Total Energy / Plant Capacity × 24 × Days) × 100 (%)"
+          },
+          "response": [
+            {
+              "name": "Success Response",
+              "originalRequest": {
+                "method": "GET",
+                "header": [
+                  {
+                    "key": "Content-Type",
+                    "value": "application/json"
+                  }
+                ],
+                "url": {
+                  "raw": "{{base_url}}/api/device/1/solar-metrics?fromDate=2026-02-10&toDate=2026-02-12&tiltAngle=18&diffuseFraction=0.2&albedo=0.2",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "device",
+                    "1",
+                    "solar-metrics"
+                  ],
+                  "query": [
+                    {
+                      "key": "fromDate",
+                      "value": "2026-02-10"
+                    },
+                    {
+                      "key": "toDate",
+                      "value": "2026-02-12"
+                    },
+                    {
+                      "key": "tiltAngle",
+                      "value": "18"
+                    },
+                    {
+                      "key": "diffuseFraction",
+                      "value": "0.2"
+                    },
+                    {
+                      "key": "albedo",
+                      "value": "0.2"
+                    }
+                  ]
+                }
+              },
+              "status": "OK",
+              "code": 200,
+              "header": [
+                {
+                  "key": "Content-Type",
+                  "value": "application/json"
+                }
+              ],
+              "body": "{\n  \"device\": {\n    \"id\": 1,\n    \"sn\": \"DEVICE-SN-001\",\n    \"type\": \"INVERTER\"\n  },\n  \"station\": {\n    \"id\": 1,\n    \"name\": \"Solar Station 1\",\n    \"location\": \"New Delhi, India\",\n    \"installedCapacity\": 10.355,\n    \"unit\": \"kWp\"\n  },\n  \"period\": {\n    \"from\": \"2026-02-10\",\n    \"to\": \"2026-02-12\",\n    \"days\": 3,\n    \"dataPoints\": 72\n  },\n  \"aggregatedData\": {\n    \"totalACEnergy\": 681.9,\n    \"averageGHI\": 5.268,\n    \"unit\": \"kWh, kWh/m²\"\n  },\n  \"calculations\": {\n    \"diffuse\": 1.027816573,\n    \"reflected\": 0.025783427,\n    \"beam\": 4.2144,\n    \"totalPOA\": 5.268\n  },\n  \"results\": {\n    \"performanceRatio\": {\n      \"value\": 72.5937642,\n      \"unit\": \"%\",\n      \"description\": \"Daily Performance Ratio\"\n    },\n    \"capacityUtilizationFactor\": {\n      \"value\": 17.1,\n      \"unit\": \"%\",\n      \"description\": \"Capacity Utilization Factor\"\n    }\n  },\n  \"detailedTimeSeries\": [\n    {\n      \"timestamp\": \"2026-02-10T00:00:00.000Z\",\n      \"acEnergy\": 25.5,\n      \"ghi\": 4.8,\n      \"weather\": {\n        \"temp\": 28.5,\n        \"clouds\": 15\n      }\n    },\n    {\n      \"timestamp\": \"2026-02-10T01:00:00.000Z\",\n      \"acEnergy\": 28.3,\n      \"ghi\": 5.2,\n      \"weather\": {\n        \"temp\": 29.1,\n        \"clouds\": 10\n      }\n    }\n  ],\n  \"calculatedAt\": \"2026-02-12T10:30:45.123Z\"\n}"
+            },
+            {
+              "name": "Device Not Found",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/device/999/solar-metrics",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "device",
+                    "999",
+                    "solar-metrics"
+                  ]
+                }
+              },
+              "status": "Not Found",
+              "code": 404,
+              "header": [],
+              "body": "{\n  \"message\": \"Device not found\"\n}"
+            },
+            {
+              "name": "No Data Found",
+              "originalRequest": {
+                "method": "GET",
+                "header": [],
+                "url": {
+                  "raw": "{{base_url}}/api/device/1/solar-metrics?fromDate=2020-01-01&toDate=2020-01-02",
+                  "host": [
+                    "{{base_url}}"
+                  ],
+                  "path": [
+                    "api",
+                    "device",
+                    "1",
+                    "solar-metrics"
+                  ],
+                  "query": [
+                    {\n                      \"key\": \"fromDate\",\n                      \"value\": \"2020-01-01\"\n                    },\n                    {\n                      \"key\": \"toDate\",\n                      \"value\": \"2020-01-02\"\n                    }\n                  ]\n                }\n              },\n              \"status\": \"Not Found\",\n              \"code\": 404,\n              \"header\": [],\n              \"body\": \"{\n  \\\"message\\\": \\\"No device data found for the specified period\\\"\n}\"\n            },\n            {\n              \"name\": \"Unauthorized\",\n              \"originalRequest\": {\n                \"method\": \"GET\",\n                \"header\": [],\n                \"url\": {\n                  \"raw\": \"{{base_url}}/api/device/1/solar-metrics\",\n                  \"host\": [\n                    \"{{base_url}}\"\n                  ],\n                  \"path\": [\n                    \"api\",\n                    \"device\",\n                    \"1\",\n                    \"solar-metrics\"\n                  ]\n                }\n              },\n              \"status\": \"Unauthorized\",\n              \"code\": 401,\n              \"header\": [],\n              \"body\": \"{\n  \\\"message\\\": \\\"No token provided\\\"\n}\"\n            }\n          ]
+        },
+        {
+          "name": "Today's Metrics (Default)",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwt_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/device/1/solar-metrics",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "device",
+                "1",
+                "solar-metrics"
+              ]
+            },
+            "description": "Get solar metrics for today (default behavior when no date parameters provided)"
+          }
+        },
+        {
+          "name": "Custom Tilt Angle",
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{jwt_token}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{base_url}}/api/device/1/solar-metrics?tiltAngle=25&diffuseFraction=0.18&albedo=0.25",
+              "host": [
+                "{{base_url}}"
+              ],
+              "path": [
+                "api",
+                "device",
+                "1",
+                "solar-metrics"
+              ],
+              "query": [
+                {
+                  "key": "tiltAngle",
+                  "value": "25",
+                  "description": "Custom tilt angle"
+                },
+                {
+                  "key": "diffuseFraction",
+                  "value": "0.18",
+                  "description": "Custom diffuse fraction"
+                },
+                {
+                  "key": "albedo",
+                  "value": "0.25",
+                  "description": "Custom albedo value"
+                }
+              ]
+            },
+            "description": "Calculate metrics with custom solar parameters"
+          }
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "base_url",
+      "value": "http://localhost:5000",
+      "type": "string"
+    },
+    {
+      "key": "jwt_token",
+      "value": "your_jwt_token_here",
+      "type": "string"
+    }
+  ]
+}
