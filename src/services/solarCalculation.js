@@ -1,27 +1,38 @@
 /**
  * Solar Energy Calculation Service
  * Calculates Performance Ratio (PR) and Capacity Utilization Factor (CUF)
+ *
+ * Formulas:
+ *   PR  = (Yf / Yr) × 100
+ *         Yf = Eac / Pdc   (Final Yield)
+ *         Yr = GHI / 1     (Reference Yield)
+ *
+ *   CUF = ActualEnergy / (TotalHours × PlantCapacity) × 100
  */
 
 class SolarCalculation {
     /**
-     * Calculate solar irradiance components
+     * Calculate solar irradiance components (POA breakdown)
      * @param {number} ghi - Global Horizontal Irradiance (kWh/m²)
      * @param {number} tiltAngle - Module tilt angle in degrees (default: 18°)
-     * @param {number} diffuseFraction - Diffuse fraction (default: 0.2)
-     * @param {number} albedo - Ground reflectance (default: 0.2)
-     * @returns {object} Irradiance components
+     * @param {number} diffuseFraction - Diffuse fraction fd (default: 0.2)
+     * @param {number} albedo - Ground reflectance ρ (default: 0.2)
+     * @returns {object} Irradiance components { diffuse, reflected, beam, totalPOA }
      */
     static calculateIrradianceComponents(ghi, tiltAngle = 18, diffuseFraction = 0.2, albedo = 0.2) {
+        if (!ghi || ghi <= 0) {
+            return { diffuse: 0, reflected: 0, beam: 0, totalPOA: 0 };
+        }
+
         const beta = (tiltAngle * Math.PI) / 180; // Convert to radians
 
-        // Diffuse Component
+        // Diffuse Component: Id = GHI × fd × (1 + cos β) / 2
         const Id = ghi * diffuseFraction * (1 + Math.cos(beta)) / 2;
 
-        // Reflected Component
+        // Reflected Component: Ir = GHI × ρ × (1 - cos β) / 2
         const Ir = ghi * albedo * (1 - Math.cos(beta)) / 2;
 
-        // Beam Component
+        // Beam Component: Ib = GHI - (Id + Ir)
         const Ib = ghi - (Id + Ir);
 
         // Total Plane of Array (POA) Irradiance
@@ -37,23 +48,33 @@ class SolarCalculation {
 
     /**
      * Calculate Performance Ratio (PR)
-     * @param {number} acEnergy - AC Energy Export in kWh
-     * @param {number} dcCapacity - Installed DC Capacity in kWp
-     * @param {number} ghi - Global Horizontal Irradiance in kWh/m²
-     * @returns {object} Performance metrics
+     * PR = (Yf / Yr) × 100
+     *
+     * @param {number} acEnergy - AC Energy Export Eac (kWh)
+     * @param {number} dcCapacity - Installed DC Capacity Pdc (kWp)
+     * @param {number} ghi - Global Horizontal Irradiance (kWh/m²)
+     * @returns {object} { referenceYield, finalYield, performanceRatio, unit }
      */
     static calculatePerformanceRatio(acEnergy, dcCapacity, ghi) {
-        if (!dcCapacity || dcCapacity === 0) {
-            throw new Error('DC Capacity is required and cannot be zero');
+        if (!dcCapacity || dcCapacity <= 0) {
+            throw new Error('DC Capacity (Pdc) is required and must be > 0');
+        }
+        if (!ghi || ghi <= 0) {
+            return {
+                referenceYield: 0,
+                finalYield: 0,
+                performanceRatio: 0,
+                unit: '%'
+            };
         }
 
-        // Reference Yield (Yr) = POA / 1 kW/m² (simplified, using GHI)
+        // Reference Yield (Yr) = GHI / 1 kW/m²
         const referenceYield = ghi / 1;
 
         // Final Yield (Yf) = Eac / Pdc
         const finalYield = acEnergy / dcCapacity;
 
-        // Performance Ratio (PR) = Yf / Yr × 100
+        // Performance Ratio (PR) = (Yf / Yr) × 100
         const performanceRatio = (finalYield / referenceYield) * 100;
 
         return {
@@ -66,29 +87,31 @@ class SolarCalculation {
 
     /**
      * Calculate Capacity Utilization Factor (CUF)
-     * CUF = (Total Energy Generated / (Plant Capacity × Hours Available)) × 100
-     * @param {number} totalEnergy - Total energy generated in kWh
-     * @param {number} plantCapacity - Plant capacity in kWp
-     * @param {number} days - Number of days
-     * @param {number} degradationFactor - Annual degradation factor (default: 0.07 for year 2)
-     * @param {number} year - System year for degradation (default: 2)
-     * @returns {object} CUF calculation
+     * Standard Formula: CUF = ActualEnergy / (TotalHours × PlantCapacity) × 100
+     *
+     * @param {number} totalEnergy - Actual energy generated (kWh)
+     * @param {number} plantCapacity - Plant capacity (kWp)
+     * @param {number} days - Number of days in period
+     * @returns {object} CUF calculation result
      */
-    static calculateCUF(totalEnergy, plantCapacity, days, degradationFactor = 0.07, year = 2) {
-        if (!plantCapacity || plantCapacity === 0) {
-            throw new Error('Plant Capacity is required and cannot be zero');
+    static calculateCUF(totalEnergy, plantCapacity, days) {
+        if (!plantCapacity || plantCapacity <= 0) {
+            throw new Error('Plant Capacity is required and must be > 0');
+        }
+        if (!days || days <= 0) {
+            throw new Error('Days must be > 0');
         }
 
         const hourAvailable = 24 * days;
-        const cuf = (totalEnergy / (plantCapacity * hourAvailable)) * 100;
+
+        // CUF = ActualEnergy / (TotalHours × PlantCapacity) × 100
+        const cuf = (totalEnergy / (hourAvailable * plantCapacity)) * 100;
 
         return {
             totalEnergy: Number(totalEnergy.toFixed(2)),
             plantCapacity: Number(plantCapacity.toFixed(3)),
             daysAnalyzed: days,
             hourAvailable: hourAvailable,
-            degradationFactor: degradationFactor,
-            year: year,
             cuf: Number(cuf.toFixed(2)),
             unit: '%'
         };
@@ -96,6 +119,7 @@ class SolarCalculation {
 
     /**
      * Extract AC Energy value from dataList
+     * Searches for daily production or AC energy parameters
      * @param {array} dataList - Array of device data parameters
      * @returns {number} AC Energy in kWh
      */
@@ -104,13 +128,12 @@ class SolarCalculation {
             return 0;
         }
 
-        // Look for common AC energy labels
         const acEnergyItem = dataList.find(item =>
             item.name && (
                 item.name.toLowerCase().includes('energy') ||
                 item.name.toLowerCase().includes('eac') ||
                 item.name.toLowerCase().includes('production') ||
-                item.key.toLowerCase().includes('etdy') || // Daily production
+                item.key.toLowerCase().includes('etdy') ||
                 item.key.toLowerCase().includes('eac')
             )
         );
@@ -119,7 +142,37 @@ class SolarCalculation {
     }
 
     /**
-     * Complete daily calculation
+     * Extract daily production (Etdy_ge1) from dataList
+     * @param {array} dataList - Array of device data parameters
+     * @returns {number} Daily production in kWh
+     */
+    static extractDailyProduction(dataList) {
+        if (!Array.isArray(dataList) || dataList.length === 0) return 0;
+
+        const item = dataList.find(d =>
+            d.key?.toLowerCase() === 'etdy_ge1' ||
+            d.key?.toLowerCase().includes('etdy')
+        );
+        return item ? parseFloat(item.value) || 0 : 0;
+    }
+
+    /**
+     * Extract cumulative total energy (Et_ge0) from dataList
+     * @param {array} dataList - Array of device data parameters
+     * @returns {number} Cumulative energy in kWh
+     */
+    static extractCumulativeEnergy(dataList) {
+        if (!Array.isArray(dataList) || dataList.length === 0) return 0;
+
+        const item = dataList.find(d =>
+            d.key?.toLowerCase() === 'et_ge0' ||
+            d.key?.toLowerCase().includes('et_ge')
+        );
+        return item ? parseFloat(item.value) || 0 : 0;
+    }
+
+    /**
+     * Complete daily calculation (PR + CUF + Irradiance)
      * @param {object} params - Calculation parameters
      * @returns {object} Complete calculation result
      */
@@ -132,21 +185,19 @@ class SolarCalculation {
             days = 1,
             tiltAngle = 18,
             diffuseFraction = 0.2,
-            albedo = 0.2,
-            degradationFactor = 0.07,
-            year = 2
+            albedo = 0.2
         } = params;
 
         try {
-            // Calculate irradiance components
+            // 1. Calculate irradiance components
             const irradiance = this.calculateIrradianceComponents(ghi, tiltAngle, diffuseFraction, albedo);
 
-            // Calculate PR using daily AC energy and GHI
+            // 2. Calculate PR using daily AC energy (Eac) and GHI
             const pr = this.calculatePerformanceRatio(acEnergy, dcCapacity, ghi);
 
-            // Calculate CUF using total energy over the period
+            // 3. Calculate CUF using total energy over the period
             const energyForCUF = totalEnergy > 0 ? totalEnergy : acEnergy;
-            const cuf = this.calculateCUF(energyForCUF, dcCapacity, days, degradationFactor, year);
+            const cuf = this.calculateCUF(energyForCUF, dcCapacity, days);
 
             return {
                 success: true,

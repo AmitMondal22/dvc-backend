@@ -53,6 +53,9 @@ router.get('/devices', protect, async (req, res) => {
     try {
         const devices = await Device.aggregate([
             {
+                $match: { deviceType: 'INVERTER' }
+            },
+            {
                 $lookup: {
                     from: 'stations',       // The MongoDB collection name for stations
                     localField: 'stationId', // The field in Device model
@@ -66,7 +69,6 @@ router.get('/devices', protect, async (req, res) => {
                     preserveNullAndEmptyArrays: true // Keep device even if station not found
                 } 
             },
-            // We removed the $project stage so ALL data is returned
         ]);
 
         res.json(devices);
@@ -106,6 +108,10 @@ router.get('/device/:deviceSn/latest', protect, async (req, res) => {
                 id: station.id,
                 name: station.name,
                 location: station.locationAddress,
+                lat: station.locationLat,
+                lng: station.locationLng,
+                installedCapacity: station.installedCapacity || station.capacity || 0,
+                type: station.type || 'N/A',
             } : null,
             data: lastData ? {
                 collectionTime: lastData.collectionTime,
@@ -187,7 +193,7 @@ router.get('/report', protect, async (req, res) => {
 router.get('/device/:deviceId/solar-metrics', protect, async (req, res) => {
     try {
         const { deviceId } = req.params;
-        const { fromDate, toDate, tiltAngle = 18, diffuseFraction = 0.2, albedo = 0.2, capacity = null, degradationFactor = 0.07, year = 2 } = req.query;
+        const { fromDate, toDate, tiltAngle = 18, diffuseFraction = 0.2, albedo = 0.2, capacity = null } = req.query;
 
         // A. Find Device by ID
         const device = await Device.findOne({ deviceId: parseInt(deviceId) });
@@ -303,34 +309,22 @@ router.get('/device/:deviceId/solar-metrics', protect, async (req, res) => {
         const detailedData = deviceDataRecords.map(record => {
             const acEnergy = SolarCalculation.extractACEnergy(record.dataList);
             const ghi = record.weatherDataId ? record.weatherDataId.ghi : 0;
+            const dailyProd = SolarCalculation.extractDailyProduction(record.dataList);
+            const cumulativeProd = SolarCalculation.extractCumulativeEnergy(record.dataList);
 
             totalACEnergy += acEnergy;
             totalGHI += ghi;
             dataCount++;
 
-            // Extract daily production (Etdy) - latest value is the cumulative daily
-            const dailyProd = record.dataList?.find(item => 
-                item.key?.toLowerCase() === 'etdy_ge1' || 
-                item.key?.toLowerCase().includes('etdy')
-            );
-            if (dailyProd && parseFloat(dailyProd.value) > 0) {
-                latestDailyProduction = parseFloat(dailyProd.value);
-            }
-
-            // Extract cumulative total production (Et_ge0)
-            const cumulativeProd = record.dataList?.find(item => 
-                item.key?.toLowerCase() === 'et_ge0' || 
-                item.key?.toLowerCase().includes('et_ge')
-            );
-            if (cumulativeProd && parseFloat(cumulativeProd.value) > 0) {
-                latestCumulativeProduction = parseFloat(cumulativeProd.value);
-            }
+            // Track latest non-zero values
+            if (dailyProd > 0) latestDailyProduction = dailyProd;
+            if (cumulativeProd > 0) latestCumulativeProduction = cumulativeProd;
 
             return {
                 timestamp: new Date(record.collectionTime * 1000).toISOString(),
                 acEnergy,
                 ghi,
-                dailyProduction: dailyProd ? parseFloat(dailyProd.value) : 0,
+                dailyProduction: dailyProd,
                 weather: record.weatherDataId ? {
                     temp: record.weatherDataId.temp,
                     clouds: record.weatherDataId.clouds
@@ -344,21 +338,19 @@ router.get('/device/:deviceId/solar-metrics', protect, async (req, res) => {
         // Use daily production (Eac) for PR calculation
         const eacForPR = latestDailyProduction > 0 ? latestDailyProduction : totalACEnergy;
 
-        // Use cumulative/total energy for CUF calculation
-        const totalEnergyForCUF = latestCumulativeProduction > 0 ? latestCumulativeProduction : totalACEnergy;
+        // Use daily production for CUF calculation (not cumulative lifetime energy)
+        const dailyEnergyForCUF = latestDailyProduction > 0 ? latestDailyProduction : totalACEnergy;
 
         // G. Calculate PR and CUF using correct values
         const calculation = SolarCalculation.calculateDaily({
             acEnergy: eacForPR,
             dcCapacity: dcCapacity,
             ghi: avgGHI,
-            totalEnergy: totalEnergyForCUF,
+            totalEnergy: dailyEnergyForCUF,
             days: days,
             tiltAngle: parseFloat(tiltAngle),
             diffuseFraction: parseFloat(diffuseFraction),
-            albedo: parseFloat(albedo),
-            degradationFactor: parseFloat(degradationFactor),
-            year: parseInt(year)
+            albedo: parseFloat(albedo)
         });
 
         if (!calculation.success) {
@@ -397,7 +389,7 @@ router.get('/device/:deviceId/solar-metrics', protect, async (req, res) => {
             aggregatedData: {
                 totalACEnergy: Number(totalACEnergy.toFixed(2)),
                 dailyProduction: Number(eacForPR.toFixed(2)),
-                totalEnergy: Number(totalEnergyForCUF.toFixed(2)),
+                totalEnergy: Number(dailyEnergyForCUF.toFixed(2)),
                 averageGHI: Number(avgGHI.toFixed(4)),
                 unit: 'kWh, kWh/m²'
             },
@@ -414,10 +406,8 @@ router.get('/device/:deviceId/solar-metrics', protect, async (req, res) => {
                     value: calculation.data.utilization.cuf,
                     totalEnergy: calculation.data.utilization.totalEnergy,
                     hourAvailable: calculation.data.utilization.hourAvailable,
-                    degradationFactor: calculation.data.utilization.degradationFactor,
-                    year: calculation.data.utilization.year,
                     unit: '%',
-                    description: 'CUF = (Total Energy / (Capacity x Hours)) x 100'
+                    description: 'CUF = ActualEnergy / (TotalHours x PlantCapacity) x 100'
                 }
             },
             detailedTimeSeries: detailedData,
